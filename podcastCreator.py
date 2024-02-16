@@ -15,18 +15,18 @@ logging.basicConfig(
 
 
 def getScriptfromGemini():
-    extracted_dialogue = ""
+    dialogue = ""
     user_input = input("Give me an idea for a podcast and I will generate it for you: ")
     chat = model.start_chat(history=[])
     response = chat.send_message(
-        "write a dialogue for a podcast according to the following logic. The podcast's content should be updated to news from the past week. The podcast is called "
+        "write a dialogue for a podcast according to the following logic. The podcast's content should be updated to news on the topic given from the past week. The podcast is called "
         "Dudu talk"
         " and it is two people (Host 1 and Host 2) talking about a topic that is defined as follows: "
         + user_input
-        + ". If the topic is too broad you can narrow it down to something more specific, but still make it updated to recent news. Choose a topic for the first segment and write the conversation for it. The show should have 5 segments. Stop after each segment and I will tell you how to continue.\n",
+        + ". If the topic is too broad you can narrow it down to something more specific, but still make it updated to recent news. Choose a topic for the first segment and write the conversation for it. There should be a new line in between Host 1 and Host 2's dialogue. The show should have 5 segments. Stop after each segment and I will tell you how to continue.\n",
     )
-    extracted_dialogue += extract_dialogue(response.text)
     logging.info(response.text)
+    dialogue = dialogue + "\n" + response.text
     for i in range(4):
         i = i + 1
         response = chat.send_message(
@@ -34,25 +34,49 @@ def getScriptfromGemini():
         )
         for chunk in response:
             logging.info(chunk.text)
-        extracted_dialogue += extract_dialogue(response.text)
+            dialogue = dialogue + chunk.text
 
+    logging.info(dialogue)
+    extracted_dialogue = extract_dialogue(dialogue)
     logging.info(extracted_dialogue)
 
 
 def extract_dialogue(script):
-    # Define a regex pattern to match lines starting with "Host 1:" or "Host 2:"
-    pattern = r"(Host 1:.*?|Host 2:.*?)\n"
+    lines = script.split("\n")
 
-    # Use re.findall to extract all matching dialogue lines
-    dialogue_lines = re.findall(pattern, script, re.DOTALL)
+    # Initialize lists to hold dialogues for each host
+    host1_dialogue = []
+    host2_dialogue = []
 
-    # Join the extracted lines into a single string, separated by newlines
-    dialogue_script = "\n".join(dialogue_lines)
+    # Iterate through each line and separate dialogues based on the host
+    for line in lines:
+        if line.startswith("**Host 1:**"):
+            # Extract dialogue and add it to host1's list
+            host1_dialogue.append(line.replace("**Host 1:** ", ""))
+        elif line.startswith("**Host 2:**"):
+            # Extract dialogue and add it to host2's list
+            host2_dialogue.append(line.replace("**Host 2:** ", ""))
 
-    return dialogue_script
+    # Write the dialogues to respective text files
+    with open("host1.txt", "w") as file1:
+        for dialogue in host1_dialogue:
+            file1.write(dialogue + "\n")
+
+    with open("host2.txt", "w") as file2:
+        for dialogue in host2_dialogue:
+            file2.write(dialogue + "\n")
 
 
 def main():
+    # Clear the log file
+    open("logging.log", "w").close()
+
+    # Clear host1.txt
+    open("host1.txt", "w").close()
+
+    # Clear host2.txt
+    open("host2.txt", "w").close()
+
     script = getScriptfromGemini()
 
 
