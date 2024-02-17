@@ -33,17 +33,16 @@ topic = ""
 
 def getScriptfromGemini():
     global topic
-
     dialogue = ""
     user_input = input("Give me an idea for a podcast and I will generate it for you: ")
     topic = user_input
 
-    descriptions = ["intro music for a podcast about " + topic]
+    descriptions = ["soothing and rhythmic music inspired by " + topic]
 
     for idx, description in enumerate(descriptions):
         wav = musicModel.generate([description])
         audio_write(
-            f"{topic}", wav[0].cpu(), musicModel.sample_rate, strategy="loudness"
+            f"introMusic", wav[0].cpu(), musicModel.sample_rate, strategy="loudness"
         )
 
     chat = model.start_chat(history=[])
@@ -129,11 +128,11 @@ def merge_text_files(host1_file, host2_file, merged_file):
 
 def text_to_speech_alternating(file_path, output_filename):
     combined_audio = AudioSegment.empty()
-    pause = AudioSegment.silent(duration=500)
+    pause = AudioSegment.silent(duration=400)
 
     with open(file_path, "r", encoding="utf-8") as file:
         for index, line in enumerate(file):
-            voice = "alloy" if index % 2 == 0 else "onyx"
+            voice = "echo" if index % 2 == 0 else "onyx"
             response = client.audio.speech.create(
                 model="tts-1", voice=voice, input=line
             )
@@ -146,11 +145,18 @@ def text_to_speech_alternating(file_path, output_filename):
 
     combined_audio.export(output_filename, format="mp3")
 
+def concat_introAud_to_speechAud(introAud, speechAud):
+    intro_music = AudioSegment.from_file(introAud, format="wav")
+    speech_audio = AudioSegment.from_file(speechAud, format="mp3")
+    (intro_music.fade_in(1500).fade_out(1500) + speech_audio).export("final_podcast_with_intro_music.mp3", format="mp3")
+    
+
 
 def main():
     getScriptfromGemini()
     merge_text_files("host1.txt", "host2.txt", "merged_dialogue.txt")
     text_to_speech_alternating("merged_dialogue.txt", "final_podcast.mp3")
+    concat_introAud_to_speechAud("introMusic.wav", "final_podcast.mp3")
 
 
 if __name__ == "__main__":
