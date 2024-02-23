@@ -8,6 +8,11 @@ import os
 import openai
 from pathlib import Path
 from openai import OpenAI
+import warnings
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, module="torch.nn.utils.weight_norm"
+)
 
 os.environ["OPENAI_API_KEY"] = "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"
 openai.api_key = "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"
@@ -17,7 +22,7 @@ client = OpenAI()
 genai.configure(api_key="AIzaSyCXUTsOzwN5le4wn3ljIj_U5puGfUJUGao")
 
 model = genai.GenerativeModel("gemini-pro")
-musicModel = MusicGen.get_pretrained("small")
+musicModel = MusicGen.get_pretrained("facebook/musicgen-small")
 musicModel.set_generation_params(duration=7)
 
 
@@ -48,23 +53,22 @@ def getScriptfromGemini():
     chat = model.start_chat(history=[])
     response = chat.send_message(
         "write a dialogue for a podcast according to the following logic. The podcast's content should be updated to news from the past week."
-        + " The podcast is called "
-        "Podcast GPT"
+        + " The podcast is called Podcast GPT"
         " and it is two people (Ofir and Daniel) talking about a topic that is defined as follows: "
         + user_input
         + ". If the topic is too broad you can narrow it down to something more specific, but still make it "
-        + "updated to recent news. Choose a topic for the first segment and write the conversation for it."
+        + "updated to recent news. Introuce the podcast with Ofir talking first, choose a topic for the first segment and write the conversation for it."
         + "Make sure to maintain podcast dynamics between the hosts during the conversation,"
-        + "make them even tease each other a bit."
+        + "make them even tease each other a bit. Add some jokes and puns as well. Don't add any more people to the conversation (no guests)"
         + "The show should have 5 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
-        + " please don't mention or announce that a segment was over. just move on and act as usual.\n",
+        + " please don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast.\n",
     )
     logging.info(response.text)
     dialogue = dialogue + response.text
     for i in range(4):
         i = i + 1
         response = chat.send_message(
-            "write the next segment of the podcast", stream=True
+            "write the next segment of the podcast.", stream=True
         )
         for chunk in response:
             logging.info(chunk.text)
@@ -86,13 +90,13 @@ def extract_dialogue(script):
     for line in lines:
         line = re.sub(r"\*\*Segment \d+:.*?\*\*", "", line)
 
-        if line.startswith("**Ofir:**"):
+        if line.startswith("**Ofir:**") or line.startswith("Ofir:"):
             if current_host == "host2" and current_dialogue:
                 host2_dialogue.append(current_dialogue.strip())
                 current_dialogue = ""
             current_dialogue += " " + line.replace("**Ofir:** ", "").strip()
             current_host = "host1"
-        elif line.startswith("**Daniel:**"):
+        elif line.startswith("**Daniel:**") or line.startswith("Daniel:"):
             if current_host == "host1" and current_dialogue:
                 host1_dialogue.append(current_dialogue.strip())
                 current_dialogue = ""
@@ -104,7 +108,6 @@ def extract_dialogue(script):
     elif current_host == "host2" and current_dialogue:
         host2_dialogue.append(current_dialogue.strip())
 
-    # Write dialogues to files
     with open("host1.txt", "w", encoding="utf-8") as file1:
         for dialogue in host1_dialogue:
             file1.write(dialogue + "\n")
@@ -126,18 +129,22 @@ def merge_text_files(host1_file, host2_file, merged_file):
             outfile.write(line2)
 
 
-def text_to_speech_alternating(file_path, output_filename):
+def generate_audio(file_path, output_filename):
     combined_audio = AudioSegment.empty()
     pause = AudioSegment.silent(duration=400)
 
     with open(file_path, "r", encoding="utf-8") as file:
         for index, line in enumerate(file):
-            voice = "echo" if index % 2 == 0 else "onyx"
+            voice = "echo" if index % 2 == 0 else "fable"
             response = client.audio.speech.create(
                 model="tts-1", voice=voice, input=line
             )
 
             temp_filename = f"temp_{index}.mp3"
+            warnings.filterwarnings(
+                "ignore",
+                category=DeprecationWarning,
+            )
             response.stream_to_file(Path(temp_filename))
             line_audio = AudioSegment.from_mp3(temp_filename)
             combined_audio += line_audio + pause
@@ -145,18 +152,20 @@ def text_to_speech_alternating(file_path, output_filename):
 
     combined_audio.export(output_filename, format="mp3")
 
-def concat_introAud_to_speechAud(introAud, speechAud):
+
+def add_intro_music(introAud, speechAud):
     intro_music = AudioSegment.from_file(introAud, format="wav")
     speech_audio = AudioSegment.from_file(speechAud, format="mp3")
-    (intro_music.fade_in(1500).fade_out(1500) + speech_audio).export("final_podcast_with_intro_music.mp3", format="mp3")
-    
+    (intro_music.fade_in(1500).fade_out(1500) + speech_audio).export(
+        "final_podcast_with_intro_music.mp3", format="mp3"
+    )
 
 
 def main():
     getScriptfromGemini()
     merge_text_files("host1.txt", "host2.txt", "merged_dialogue.txt")
-    text_to_speech_alternating("merged_dialogue.txt", "final_podcast.mp3")
-    concat_introAud_to_speechAud("introMusic.wav", "final_podcast.mp3")
+    generate_audio("merged_dialogue.txt", "final_podcast.mp3")
+    add_intro_music("introMusic.wav", "final_podcast.mp3")
 
 
 if __name__ == "__main__":
