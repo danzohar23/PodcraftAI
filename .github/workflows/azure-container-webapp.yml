@@ -94,7 +94,7 @@ jobs:
         uses: "azure/aci-deploy@v1"
         with:
           resource-group: ${{ env.RESOURCE_GROUP }}
-          dns-name-label: podcastgpt.hhh2dfcpbscab6hc.uksouth.azurecontainer.io
+          dns-name-label: podcastgpt
           image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/pythonapp:latest
           registry-username: danielfastapi
           registry-password: ${{ secrets.REGISTRY_PASSWORD }}
