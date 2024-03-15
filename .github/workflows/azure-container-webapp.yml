@@ -96,6 +96,8 @@ jobs:
           resource-group: ${{ env.RESOURCE_GROUP }}
           dns-name-label: podcastgpt
           image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/pythonapp:latest
+          memory: 11
+          restart policy: "OnFailure"
           registry-username: danielfastapi
           registry-password: ${{ secrets.REGISTRY_PASSWORD }}
           name: ${{ env.CONTAINER_INSTANCE_NAME }}
