@@ -9,14 +9,6 @@ from podcastCreator import (
     add_intro_music,
 )
 
-# Load your API keys from environment variables
-openai_api_key = os.getenv("OPENAI_API_KEY")
-google_api_key = os.getenv("GOOGLE_API_KEY")
-
-# Check if the API keys are loaded correctly
-if not openai_api_key or not google_api_key:
-    raise EnvironmentError("API keys not set properly as environment variables.")
-
 app = FastAPI()
 
 
@@ -54,4 +46,4 @@ def podcast_generation_task(topic: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=80)

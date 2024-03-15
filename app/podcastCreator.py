@@ -10,17 +10,19 @@ from pathlib import Path
 from openai import OpenAI
 import warnings
 import requests
+from dotenv import dotenv_values
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.utils.weight_norm"
 )
 
-openai_api_key = os.getenv("OPENAI_API_KEY")
-google_api_key = os.getenv("GOOGLE_API_KEY")
+config = dotenv_values(".env")
+openai_api_key = config["OPENAI_API_KEY"]
+google_api_key = config["GOOGLE_API_KEY"]
 
 
 openai.api_key = openai_api_key
-client = OpenAI()
+client = OpenAI(api_key=openai_api_key)
 
 
 genai.configure(api_key=google_api_key)
@@ -40,37 +42,6 @@ logging.basicConfig(
 topic = ""
 
 
-def fetch_wikipedia_summary(search_query):
-    """Fetch summary content from Wikipedia for a given search query after finding the closest matching article."""
-    # Step 1: Search Wikipedia for close matches
-    search_url = "https://en.wikipedia.org/w/api.php"
-    search_params = {
-        "action": "query",
-        "list": "search",
-        "srsearch": search_query,
-        "format": "json",
-    }
-
-    search_response = requests.get(search_url, params=search_params)
-    search_results = search_response.json().get("query", {}).get("search", [])
-
-    if not search_results:
-        return "No results found."
-
-    # Assume the first search result is the most relevant
-    closest_title = search_results[0]["title"]
-
-    # Step 2: Fetch the summary of the closest matching article
-    summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{closest_title.replace(' ', '_')}"
-    summary_response = requests.get(summary_url)
-
-    if summary_response.status_code == 200:
-        data = summary_response.json()
-        return data.get("extract", "No summary available.")
-    else:
-        return "Failed to fetch data from Wikipedia."
-
-
 def getScriptfromGemini(topic):
     dialogue = ""
     if topic == None:
@@ -78,8 +49,6 @@ def getScriptfromGemini(topic):
             "Give me an idea for a podcast and I will generate it for you: "
         )
         topic = user_input
-
-    wikipedia_content = fetch_wikipedia_summary(topic)
 
     descriptions = ["soothing and rhythmic music inspired by " + topic]
 
@@ -91,7 +60,7 @@ def getScriptfromGemini(topic):
 
     chat = model.start_chat(history=[])
     response = chat.send_message(
-        f"write a podcast dialogue inspired by the topic '{topic}' and based on updated information: {wikipedia_content}\n"
+        f"write a podcast dialogue inspired by the topic '{topic}'\n"
         + "The podcast's content should be updated to news from the past week."
         + " The podcast is called Podcast GPT"
         " and it is two people (Ofir and Daniel) talking about a topic that is defined as follows: "
