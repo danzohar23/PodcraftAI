@@ -64,6 +64,32 @@ jobs:
     needs: build
 
     steps:
+      # Logs in with Azure credentials
+      - name: Azure Login
+        run: az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
+      # Generating and logging in with a temp token
+      - name: Get ACR token
+        id: get_acr_token
+        run: |
+          # Get ACR token
+          TOKEN=$(az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}  \
+            --expose-token \
+            --output tsv \
+            --query accessToken)
+
+          # Check if fetch token succeeded
+          [[ $? -ne 0 ]] && echo "::error::helm unable to login into registry" && exit 1
+
+          # Expose output to next step
+          echo "::set-output name=acr_token::$TOKEN"
+
+      - uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io
+          username: 00000000-0000-0000-0000-000000000000
+          password: ${{ steps.get_acr_token.outputs.acr_token }}
+
       - name: "Deploy to Azure Container Instances"
         uses: "azure/aci-deploy@v1"
         with:
