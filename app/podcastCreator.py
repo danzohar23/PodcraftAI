@@ -16,9 +16,13 @@ warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.utils.weight_norm"
 )
 
-config = dotenv_values(".env")
-openai_api_key = config["OPENAI_API_KEY"]
-google_api_key = config["GOOGLE_API_KEY"]
+config = dotenv_values()
+if config != {}:
+    openai_api_key = config["OPENAI_API_KEY"]
+    google_api_key = config["GOOGLE_API_KEY"]
+else:
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
 
 
 openai.api_key = openai_api_key
