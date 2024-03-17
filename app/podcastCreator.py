@@ -1,4 +1,3 @@
-import logging
 import re
 import google.generativeai as genai
 from audiocraft.models import MusicGen
@@ -9,8 +8,8 @@ import openai
 from pathlib import Path
 from openai import OpenAI
 import warnings
-import requests
 from dotenv import dotenv_values
+
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.utils.weight_norm"
@@ -36,13 +35,6 @@ musicModel = MusicGen.get_pretrained("facebook/musicgen-small")
 musicModel.set_generation_params(duration=7)
 
 
-logging.basicConfig(
-    filename="logging.log",
-    filemode="w",
-    level=logging.INFO,
-    format="%(asctime)s:%(levelname)s:%(message)s",
-)
-
 topic = ""
 
 
@@ -53,7 +45,6 @@ def getScriptfromGemini(topic):
             "Give me an idea for a podcast and I will generate it for you: "
         )
         topic = user_input
-
     descriptions = ["soothing and rhythmic music inspired by " + topic]
 
     for idx, description in enumerate(descriptions):
@@ -64,7 +55,8 @@ def getScriptfromGemini(topic):
 
     chat = model.start_chat(history=[])
     response = chat.send_message(
-        f"write a podcast dialogue inspired by the topic '{topic}'\n"
+        f"write a podcast dialogue inspired by the topic '{topic}',"
+        + "if no topic was inserted, make up a podcast about a topic of your desire.'\n"
         + "The podcast's content should be updated to news from the past week."
         + " The podcast is called Podcast GPT"
         " and it is two people (Ofir and Daniel) talking about a topic that is defined as follows: "
@@ -72,26 +64,26 @@ def getScriptfromGemini(topic):
         + ". If the topic is too broad you can narrow it down to something more specific, but still make it "
         + "updated to recent news. Introuce the podcast with Ofir talking first, choose a topic for the first segment and write the conversation for it."
         + "Make sure to maintain podcast dynamics between the hosts during the conversation,"
+        + "make them have critical thinking but also be open to new ideas and opinions, make them creative al well."
         + "make them even tease each other a bit. Add some jokes and puns as well but don't literally say that you try to be funny or witty."
         + "use your common sense to decide if the topic is appropriate for laughing at. if not then don't add jokes and just keep it serious."
         + " Don't add any more people to the conversation (no guests)"
-        + "The show should have 5 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
-        + " please don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast.\n",
+        + "The show should have 10 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
+        + " please don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast."
+        + "Don't proceed to a new segment after the ending outro,"
+        + "make ONLY ONE occurance of a wrap up and make it only at the end of the whole conversation at the end of the very last segment."
+        + "when the podcast is over then it's over.\n",
     )
-    logging.info(response.text)
     dialogue = dialogue + response.text
-    for i in range(4):
+    for i in range(9):
         i = i + 1
         response = chat.send_message(
             "write the next segment of the podcast.", stream=True
         )
         for chunk in response:
-            logging.info(chunk.text)
             dialogue = dialogue + chunk.text
 
-    logging.info(dialogue)
     extracted_dialogue = extract_dialogue(dialogue)
-    logging.info(extracted_dialogue)
 
 
 def extract_dialogue(script):
@@ -150,6 +142,72 @@ def merge_text_files(host1_file, host2_file, merged_file):
             outfile.write(line2)
 
 
+def read_script(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        script_text = file.read()
+    return script_text
+
+
+def generate_revised_script(script_text):
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a highly skilled editor. Please revise the following podcast script for improved structure, flow, coherence, facts checks and engagement. simply take the script given to you and make it better. if you see multiple outros in the text given to you, keep only the last one but make sure to still include the segments accompanying these outros. make sure to keep it only with the text itself. no comments, announcing new segments or headlines from you. Use every piece of information from the original text while keeping the entire new generated text coherant and logical. Make it sound like a real conversation between two people and maintain the same dynamics Ofir and Daniel are having, including the jokes and puns and even add new ones. do your best to make the podcast the longest you can. Don't forget to have a single outro to the podcast when it's over.",
+            },
+            {"role": "user", "content": script_text},
+        ],
+        temperature=0.7,
+        max_tokens=4096,
+        top_p=1.0,
+        frequency_penalty=0.0,
+        presence_penalty=0.0,
+    )
+
+    if response.choices and response.choices[0].message.content:
+        revised_script = response.choices[0].message.content
+        return revised_script.strip()
+    else:
+        return "No revision was generated. Please check the input script and try again."
+
+
+def clean_revised_dialogue(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        lines = file.readlines()
+
+    cleaned_lines = []
+    for line in lines:
+        cleaned_line = re.sub(
+            r"^\*\*(Ofir|Daniel):\*\*\s*|^(\*\*Ofir\*\*:\s*|\*\*Daniel\*\*:\s*)|(Ofir:|Daniel:)\s*",
+            "",
+            line,
+        )
+        cleaned_line = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned_line)
+        cleaned_line = re.sub(
+            r"\bsegment\s+\d+\b", "", cleaned_line, flags=re.IGNORECASE
+        ).strip()
+        cleaned_lines.append(cleaned_line)
+
+    with open(file_path, "w", encoding="utf-8") as file:
+        for line in cleaned_lines:
+            file.write(line + "\n")
+
+
+def save_revised_script(script_text, file_path="revised_dialogue.txt"):
+    normalized_text = re.sub(r"\n\s*\n", "\n", script_text).strip()
+    with open(file_path, "w", encoding="utf-8") as file:
+        file.write(normalized_text)
+
+
+def total_revision_process(file_path):
+    current_script = read_script(file_path=file_path)
+    revised_script = generate_revised_script(current_script)
+    save_revised_script(revised_script, file_path="revised_dialogue.txt")
+    clean_revised_dialogue("revised_dialogue.txt")
+
+
 def generate_audio(file_path, output_filename):
     combined_audio = AudioSegment.empty()
     pause = AudioSegment.silent(duration=400)
@@ -174,19 +232,23 @@ def generate_audio(file_path, output_filename):
     combined_audio.export(output_filename, format="mp3")
 
 
-def add_intro_music(introAud, speechAud):
+def add_intro_music(introAud, speechAud, topic):
+    safe_topic = topic.replace(" ", "_")
+    final_podcast_filename = f"{safe_topic}_final_podcast_with_intro_music.mp3"
+
     intro_music = AudioSegment.from_file(introAud, format="wav")
     speech_audio = AudioSegment.from_file(speechAud, format="mp3")
-    (intro_music.fade_in(1500).fade_out(1500) + speech_audio).export(
-        "final_podcast_with_intro_music.mp3", format="mp3"
-    )
+    final_podcast = intro_music.fade_in(1500).fade_out(1500) + speech_audio
+
+    final_podcast.export(final_podcast_filename, format="mp3")
 
 
 def main():
     getScriptfromGemini(topic)
     merge_text_files("host1.txt", "host2.txt", "merged_dialogue.txt")
-    generate_audio("merged_dialogue.txt", "final_podcast.mp3")
-    add_intro_music("introMusic.wav", "final_podcast.mp3")
+    total_revision_process("merged_dialogue.txt")
+    generate_audio("revised_dialogue.txt", "final_podcast.mp3")
+    add_intro_music("introMusic.wav", "final_podcast.mp3", topic)
 
 
 if __name__ == "__main__":

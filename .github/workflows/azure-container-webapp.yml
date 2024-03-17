@@ -49,7 +49,6 @@ jobs:
           username: 00000000-0000-0000-0000-000000000000
           password: ${{ steps.get_acr_token.outputs.acr_token }}
 
-          # Builds and pushes an image up to your Azure Container Registry
       - name: Build and push image to ACR
         run: |
           docker buildx build . --push \
@@ -99,6 +98,6 @@ jobs:
           memory: 11
           registry-username: danielfastapi
           registry-password: ${{ secrets.REGISTRY_PASSWORD }}
-          environment-variables: OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+          environment-variables: OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} AZURE_SQL_CONNECTIONSTRING=${{ secrets.AZURE_SQL_CONNECTIONSTRING }}
           name: ${{ env.CONTAINER_INSTANCE_NAME }}
           location: "uk south"
