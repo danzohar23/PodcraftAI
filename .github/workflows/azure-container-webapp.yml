@@ -100,4 +100,4 @@ jobs:
           registry-password: ${{ secrets.REGISTRY_PASSWORD }}
           environment-variables: OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} AZURE_SQL_CONNECTIONSTRING=${{ secrets.AZURE_SQL_CONNECTIONSTRING }}
           name: ${{ env.CONTAINER_INSTANCE_NAME }}
-          location: "uk south"
+          location: "Israel Central"
