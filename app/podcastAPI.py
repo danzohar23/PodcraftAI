@@ -2,6 +2,11 @@ import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 import os
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+import pyodbc
+from dotenv import dotenv_values
 from podcastCreator import (
     getScriptfromGemini,
     merge_text_files,
@@ -10,7 +15,51 @@ from podcastCreator import (
     add_intro_music,
 )
 
+
+class Podcast(BaseModel):
+    podcastname: str
+    creation_date: datetime
+    file_path: str
+
+
+config = dotenv_values()
+if config != {}:
+    connection_string = config["AZURE_SQL_CONNECTIONSTRING"]
+else:
+    connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
+
+
+def create_podcast_entry(podcast: Podcast):
+    with pyodbc.connect(connection_string) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO Podcasts (Name, CreationDate, FilePath) VALUES (?, ?, ?)",
+            podcast.podcastname,
+            podcast.creation_date,
+            podcast.file_path,
+        )
+        conn.commit()
+
+
+def create_podcasts_table():
+    with pyodbc.connect(connection_string) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Podcasts')
+            CREATE TABLE Podcasts (
+                Id INT PRIMARY KEY IDENTITY,
+                Name NVARCHAR(255),
+                CreationDate DATETIME,
+                FilePath NVARCHAR(255)
+            )
+        """
+        )
+        conn.commit()
+
+
 app = FastAPI()
+create_podcasts_table()
 
 
 @app.get("/")
@@ -28,6 +77,10 @@ async def generate_podcast(background_tasks: BackgroundTasks, topic: str):
 async def download_file(filename: str):
     file_path = f"./{filename}"
     if os.path.exists(file_path):
+        new_podcast = Podcast(
+            podcastname=filename, creation_date=datetime.now(), file_path=file_path
+        )
+        create_podcast_entry(new_podcast)
         return FileResponse(path=file_path, filename=filename, media_type="audio/mpeg")
     raise HTTPException(status_code=404, detail="File not found")
 
