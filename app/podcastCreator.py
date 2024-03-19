@@ -9,7 +9,12 @@ from pathlib import Path
 from openai import OpenAI
 import warnings
 from dotenv import dotenv_values
-
+import numpy as np
+import wikipedia
+import requests
+import sqlite3
+import pickle
+import logging
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.utils.weight_norm"
@@ -38,6 +43,106 @@ musicModel.set_generation_params(duration=7)
 topic = ""
 
 
+def setup_database():
+    conn = sqlite3.connect("wikipedia_articles.db")
+    c = conn.cursor()
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS articles
+                 (title TEXT PRIMARY KEY, text TEXT, text_embeddings BLOB)"""
+    )
+    conn.commit()
+    return conn, c
+
+
+def insert_article(conn, c, title, text, embedding):
+    embedding_blob = pickle.dumps(embedding)
+    c.execute(
+        "INSERT OR REPLACE INTO articles (title, text, text_embeddings) VALUES (?, ?, ?)",
+        (title, text, embedding_blob),
+    )
+    conn.commit()
+
+
+def process_and_store_articles(query, limit=5):
+
+    conn, c = setup_database()
+
+    articles_text = get_wikipedia_articles_summaries(query, limit)
+
+    for title, text in articles_text.items():
+        embedding = get_embedding(text)
+        insert_article(conn, c, title, text, embedding)
+
+    conn.close()
+
+
+def get_embedding(text, model="text-embedding-ada-002"):
+    text = text.replace("\n", " ")
+    response = client.embeddings.create(input=text, model=model)
+    try:
+        embedding = response["data"][0]["embedding"]
+    except TypeError:
+        embedding = response.data[0].embedding
+    return embedding
+
+
+def cosine_similarity(v1, v2):
+    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+
+def get_wikipedia_articles_summaries(query, limit=3):
+    logging.basicConfig(
+        filename="wiki.log",
+        filemode="w",
+        level=logging.INFO,
+        format="%(asctime)s:%(levelname)s:%(message)s",
+    )
+    wikipedia.set_lang("en")
+    results = wikipedia.search(query, results=limit)
+
+    articles_summaries = {}
+    for title in results:
+        try:
+            logging.info(f"Retrieving summary for {title}")
+            articles_summaries[title] = wikipedia.summary(title, auto_suggest=False)
+            logging.info(articles_summaries[title])
+        except wikipedia.exceptions.DisambiguationError as e:
+            print(f"Disambiguation error for {title}, taking first option instead.")
+            page = wikipedia.page(e.options[0])
+            articles_summaries[e.options[0]] = page.summary
+            logging.info(articles_summaries[e.options[0]])
+        except Exception as e:
+            print(f"Error retrieving summary for {title}: {e}")
+
+    return articles_summaries
+
+
+def find_most_relevant_article(query, summaries, limit=3):
+    conn, c = setup_database()
+    if summaries and list(summaries.keys())[0].lower() == query.lower():
+        return list(summaries.keys())[0]
+    query_embedding = get_embedding(query)
+
+    max_similarity = -1
+    most_relevant_title = None
+
+    for title, summary in summaries.items():
+        summary_embedding = get_embedding(summary)
+        similarity = cosine_similarity(
+            np.array(query_embedding), np.array(summary_embedding)
+        )
+
+        if similarity > max_similarity:
+            max_similarity = similarity
+            most_relevant_title = title
+
+        insert_article(conn, c, title, summary, summary_embedding)
+
+    conn.close()
+
+    return most_relevant_title
+
+
 def getScriptfromGemini(topic):
     dialogue = ""
     if topic == None:
@@ -53,9 +158,14 @@ def getScriptfromGemini(topic):
             f"introMusic", wav[0].cpu(), musicModel.sample_rate, strategy="loudness"
         )
 
+    wikipedia_summaries = get_wikipedia_articles_summaries(topic)
+
+    most_relevant_title = find_most_relevant_article(topic, wikipedia_summaries)
+    wikipedia_content = wikipedia_summaries.get(most_relevant_title)
+
     chat = model.start_chat(history=[])
     response = chat.send_message(
-        f"write a podcast dialogue inspired by the topic '{topic}',"
+        f"Considering the following informantion from Wikipedia: '{wikipedia_content}', write a podcast dialogue inspired by the topic '{topic}',"
         + "if no topic was inserted, make up a podcast about a topic of your desire.'\n"
         + "The podcast's content should be updated to news from the past week."
         + " The podcast is called Podcast GPT"
@@ -68,14 +178,14 @@ def getScriptfromGemini(topic):
         + "make them even tease each other a bit. Add some jokes and puns as well but don't literally say that you try to be funny or witty."
         + "use your common sense to decide if the topic is appropriate for laughing at. if not then don't add jokes and just keep it serious."
         + " Don't add any more people to the conversation (no guests)"
-        + "The show should have 10 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
+        + "The show should have 6 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
         + " please don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast."
         + "Don't proceed to a new segment after the ending outro,"
         + "make ONLY ONE occurance of a wrap up and make it only at the end of the whole conversation at the end of the very last segment."
         + "when the podcast is over then it's over.\n",
     )
     dialogue = dialogue + response.text
-    for i in range(9):
+    for i in range(5):
         i = i + 1
         response = chat.send_message(
             "write the next segment of the podcast.", stream=True
@@ -83,7 +193,7 @@ def getScriptfromGemini(topic):
         for chunk in response:
             dialogue = dialogue + chunk.text
 
-    extracted_dialogue = extract_dialogue(dialogue)
+    extract_dialogue(dialogue)
 
 
 def extract_dialogue(script):
@@ -244,6 +354,7 @@ def add_intro_music(introAud, speechAud, topic):
 
 
 def main():
+    process_and_store_articles(topic, limit=5)
     getScriptfromGemini(topic)
     merge_text_files("host1.txt", "host2.txt", "merged_dialogue.txt")
     total_revision_process("merged_dialogue.txt")
