@@ -1,4 +1,6 @@
+import datetime
 import re
+from bs4 import BeautifulSoup, NavigableString
 import google.generativeai as genai
 from audiocraft.models import MusicGen
 from audiocraft.data.audio import audio_write
@@ -92,7 +94,7 @@ def cosine_similarity(v1, v2):
 
 def get_wikipedia_articles_summaries(query, limit=3):
     logging.basicConfig(
-        filename="wiki.log",
+        filename="logging.log",
         filemode="w",
         level=logging.INFO,
         format="%(asctime)s:%(levelname)s:%(message)s",
@@ -143,8 +145,59 @@ def find_most_relevant_article(query, summaries, limit=3):
     return most_relevant_title
 
 
+def scrape_nba_games_between_dates(url, start_date, end_date):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    start_tag = soup.find(lambda tag: tag.name == "b" and start_date in tag.text)
+    end_tag = soup.find(lambda tag: tag.name == "b" and end_date in tag.text)
+
+    if not start_tag or not end_tag:
+        return "Start or end tag not found."
+
+    # Capture all elements until the end tag
+    elements_between_dates = []
+    for element in start_tag.next_siblings:
+        if element == end_tag:
+            break
+        # Check if it's NavigableString and not empty
+        if isinstance(element, NavigableString):
+            text = str(element).strip()
+            if text:
+                elements_between_dates.append(text)
+        elif element.name in ["br", "u"]:
+            elements_between_dates.append(str(element))
+
+    result_text = "Recap of yesterdays games: " + "\n".join(elements_between_dates)
+    return result_text.strip()
+
+
+def getNBAPodcastContent():
+    yesterdays_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime(
+        "%A, %B %d, %Y"
+    )
+    two_days_ago_date = (datetime.datetime.now() - datetime.timedelta(days=2)).strftime(
+        "%A, %B %d, %Y"
+    )
+    start_date = "NBA Daily For " + yesterdays_date
+    end_date = "NBA Daily For " + two_days_ago_date
+    url = "http://www.insidehoops.com/daily.shtml"
+    nba_game_info = scrape_nba_games_between_dates(url, start_date, end_date)
+    clean_nba_game_info = (
+        nba_game_info.replace("<br/>", "")
+        .replace("<u>", "")
+        .replace("</u>", "")
+        .replace("<br>", "")
+        .replace("<b>", "")
+        .replace("\n", " ")
+        .strip()
+    )
+    return clean_nba_game_info
+
+
 def getScriptfromGemini(topic):
     dialogue = ""
+    nba_message = ""
     if topic == None:
         user_input = input(
             "Give me an idea for a podcast and I will generate it for you: "
@@ -161,11 +214,17 @@ def getScriptfromGemini(topic):
     wikipedia_summaries = get_wikipedia_articles_summaries(topic)
 
     most_relevant_title = find_most_relevant_article(topic, wikipedia_summaries)
-    wikipedia_content = wikipedia_summaries.get(most_relevant_title)
+    podcast_content = wikipedia_summaries.get(most_relevant_title)
+
+    if "nba" in topic.lower() or "basketball" in topic.lower():
+        podcast_content = getNBAPodcastContent()
+        nba_message = (
+            "The following is a recap of yesterday's NBA games. Use this information:\n"
+        )
 
     chat = model.start_chat(history=[])
     response = chat.send_message(
-        f"Considering the following informantion from Wikipedia: '{wikipedia_content}', write a podcast dialogue inspired by the topic '{topic}',"
+        f"{nba_message} Considering the following informantion: '{podcast_content}', write a podcast dialogue inspired by the topic '{topic}',"
         + "if no topic was inserted, make up a podcast about a topic of your desire.'\n"
         + "The podcast's content should be updated to news from the past week."
         + " The podcast is called Podcast GPT"
@@ -179,7 +238,7 @@ def getScriptfromGemini(topic):
         + "use your common sense to decide if the topic is appropriate for laughing at. if not then don't add jokes and just keep it serious."
         + " Don't add any more people to the conversation (no guests)"
         + "The show should have 6 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
-        + " please don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast."
+        + " don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast."
         + "Don't proceed to a new segment after the ending outro,"
         + "make ONLY ONE occurance of a wrap up and make it only at the end of the whole conversation at the end of the very last segment."
         + "when the podcast is over then it's over.\n",
@@ -188,7 +247,8 @@ def getScriptfromGemini(topic):
     for i in range(5):
         i = i + 1
         response = chat.send_message(
-            "write the next segment of the podcast.", stream=True
+            "write the next segment of the podcast only if the previous segment didn't end with an outro",
+            stream=True,
         )
         for chunk in response:
             dialogue = dialogue + chunk.text
@@ -197,6 +257,11 @@ def getScriptfromGemini(topic):
 
 
 def extract_dialogue(script):
+    logging.basicConfig(
+        filename="logging.log",
+        level=logging.INFO,
+        format="%(asctime)s:%(levelname)s:%(message)s",
+    )
     lines = script.split("\n")
 
     host1_dialogue = []
@@ -205,6 +270,7 @@ def extract_dialogue(script):
     current_dialogue = ""
 
     for line in lines:
+        logging.info(line)
         line = re.sub(r"\*\*Segment \d+:.*?\*\*", "", line)
 
         if line.startswith("**Ofir:**") or line.startswith("Ofir:"):
@@ -297,6 +363,9 @@ def clean_revised_dialogue(file_path):
         cleaned_line = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned_line)
         cleaned_line = re.sub(
             r"\bsegment\s+\d+\b", "", cleaned_line, flags=re.IGNORECASE
+        ).strip()
+        cleaned_line = re.sub(
+            r"\boutro\b", "", cleaned_line, flags=re.IGNORECASE
         ).strip()
         cleaned_lines.append(cleaned_line)
 
