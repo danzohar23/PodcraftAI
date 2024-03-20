@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 import os
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from azure.storage.blob import BlobServiceClient, BlobClient
 import pyodbc
 from dotenv import dotenv_values
 from podcastCreator import (
@@ -25,8 +25,10 @@ class Podcast(BaseModel):
 config = dotenv_values()
 if config != {}:
     connection_string = config["AZURE_SQL_CONNECTIONSTRING"]
+    blob_connection_string = config["AZURE_BLOB_CONNECTIONSTRING"]
 else:
     connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
+    blob_connection_string = os.environ["AZURE_BLOB_CONNECTIONSTRING"]
 
 
 def create_podcast_entry(podcast: Podcast):
@@ -58,13 +60,33 @@ def create_podcasts_table():
         conn.commit()
 
 
+def upload_file_to_blob_and_store_url_in_sql(file_path, file_name, container_name):
+
+    blob_service_client = BlobServiceClient.from_connection_string(
+        blob_connection_string
+    )
+
+    blob_client = blob_service_client.get_blob_client(
+        container=container_name, blob=file_name
+    )
+
+    with open(file_path, "rb") as data:
+        blob_client.upload_blob(data, overwrite=True)
+
+    blob_url = blob_client.url
+
+    return blob_url
+
+
 app = FastAPI()
 create_podcasts_table()
 
 
 @app.get("/")
 async def read_item():
-    return {"message": "Hello World"}
+    return {
+        "Welcome to PodcastGPT": "Write your topic for the podcast, and once the file is ready you can type the topic into the 'download' function to get the podcast file. For example, 'open ai' will be 'open_ai'"
+    }
 
 
 @app.post("/generate_podcast/")
@@ -76,9 +98,12 @@ async def generate_podcast(background_tasks: BackgroundTasks, topic: str):
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     file_path = f"./{filename}"
+    blob_file_path = upload_file_to_blob_and_store_url_in_sql(
+        file_path, filename, "blob1"
+    )
     if os.path.exists(file_path):
         new_podcast = Podcast(
-            podcastname=filename, creation_date=datetime.now(), file_path=file_path
+            podcastname=filename, creation_date=datetime.now(), file_path=blob_file_path
         )
         create_podcast_entry(new_podcast)
         return FileResponse(path=file_path, filename=filename, media_type="audio/mpeg")

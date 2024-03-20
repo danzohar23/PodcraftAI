@@ -14,8 +14,6 @@ from dotenv import dotenv_values
 import numpy as np
 import wikipedia
 import requests
-import sqlite3
-import pickle
 import logging
 
 warnings.filterwarnings(
@@ -45,39 +43,6 @@ musicModel.set_generation_params(duration=7)
 topic = ""
 
 
-def setup_database():
-    conn = sqlite3.connect("wikipedia_articles.db")
-    c = conn.cursor()
-    c.execute(
-        """CREATE TABLE IF NOT EXISTS articles
-                 (title TEXT PRIMARY KEY, text TEXT, text_embeddings BLOB)"""
-    )
-    conn.commit()
-    return conn, c
-
-
-def insert_article(conn, c, title, text, embedding):
-    embedding_blob = pickle.dumps(embedding)
-    c.execute(
-        "INSERT OR REPLACE INTO articles (title, text, text_embeddings) VALUES (?, ?, ?)",
-        (title, text, embedding_blob),
-    )
-    conn.commit()
-
-
-def process_and_store_articles(query, limit=5):
-
-    conn, c = setup_database()
-
-    articles_text = get_wikipedia_articles_summaries(query, limit)
-
-    for title, text in articles_text.items():
-        embedding = get_embedding(text)
-        insert_article(conn, c, title, text, embedding)
-
-    conn.close()
-
-
 def get_embedding(text, model="text-embedding-ada-002"):
     text = text.replace("\n", " ")
     response = client.embeddings.create(input=text, model=model)
@@ -99,6 +64,7 @@ def get_wikipedia_articles_summaries(query, limit=3):
         level=logging.INFO,
         format="%(asctime)s:%(levelname)s:%(message)s",
     )
+    warnings.filterwarnings("ignore", category=UserWarning, module="wikipedia")
     wikipedia.set_lang("en")
     results = wikipedia.search(query, results=limit)
 
@@ -109,18 +75,17 @@ def get_wikipedia_articles_summaries(query, limit=3):
             articles_summaries[title] = wikipedia.summary(title, auto_suggest=False)
             logging.info(articles_summaries[title])
         except wikipedia.exceptions.DisambiguationError as e:
-            print(f"Disambiguation error for {title}, taking first option instead.")
+            logging.info("Disambiguation error, taking first option instead.")
             page = wikipedia.page(e.options[0])
             articles_summaries[e.options[0]] = page.summary
             logging.info(articles_summaries[e.options[0]])
         except Exception as e:
-            print(f"Error retrieving summary for {title}: {e}")
+            logging.info(f"Error retrieving summary for {title}: {e}")
 
     return articles_summaries
 
 
-def find_most_relevant_article(query, summaries, limit=3):
-    conn, c = setup_database()
+def find_most_relevant_article(query, summaries):
     if summaries and list(summaries.keys())[0].lower() == query.lower():
         return list(summaries.keys())[0]
     query_embedding = get_embedding(query)
@@ -138,10 +103,7 @@ def find_most_relevant_article(query, summaries, limit=3):
             max_similarity = similarity
             most_relevant_title = title
 
-        insert_article(conn, c, title, summary, summary_embedding)
-
-    conn.close()
-
+    logging.info(f"Most relevant article: {most_relevant_title}")
     return most_relevant_title
 
 
@@ -155,21 +117,14 @@ def scrape_nba_games_between_dates(url, start_date, end_date):
     if not start_tag or not end_tag:
         return "Start or end tag not found."
 
-    # Capture all elements until the end tag
     elements_between_dates = []
-    for element in start_tag.next_siblings:
+    for element in start_tag.next_elements:
         if element == end_tag:
             break
-        # Check if it's NavigableString and not empty
-        if isinstance(element, NavigableString):
-            text = str(element).strip()
-            if text:
-                elements_between_dates.append(text)
-        elif element.name in ["br", "u"]:
-            elements_between_dates.append(str(element))
+        if isinstance(element, NavigableString) and element.strip():
+            elements_between_dates.append(element.strip())
 
-    result_text = "Recap of yesterdays games: " + "\n".join(elements_between_dates)
-    return result_text.strip()
+    return "Recap of yesterday's games: " + " ".join(elements_between_dates)
 
 
 def getNBAPodcastContent():
@@ -212,16 +167,16 @@ def getScriptfromGemini(topic):
         )
 
     wikipedia_summaries = get_wikipedia_articles_summaries(topic)
-
+    logging.info(f"Summaries from wikipedia retrieved")
     most_relevant_title = find_most_relevant_article(topic, wikipedia_summaries)
     podcast_content = wikipedia_summaries.get(most_relevant_title)
 
-    if "nba" in topic.lower() or "basketball" in topic.lower():
+    if topic.lower() == "nba" or topic.lower() == "basketball":
         podcast_content = getNBAPodcastContent()
         nba_message = (
             "The following is a recap of yesterday's NBA games. Use this information:\n"
         )
-
+    logging.info("Starting Script Generation")
     chat = model.start_chat(history=[])
     response = chat.send_message(
         f"{nba_message} Considering the following informantion: '{podcast_content}', write a podcast dialogue inspired by the topic '{topic}',"
@@ -237,21 +192,28 @@ def getScriptfromGemini(topic):
         + "make them even tease each other a bit. Add some jokes and puns as well but don't literally say that you try to be funny or witty."
         + "use your common sense to decide if the topic is appropriate for laughing at. if not then don't add jokes and just keep it serious."
         + " Don't add any more people to the conversation (no guests)"
-        + "The show should have 6 segments. There should be a newline in between the hosts' dialogue. Stop after each segment and I will tell you how to continue."
-        + " don't mention or announce that a segment was over. just move on and act as usual. After the last segment, have the hosts say an outro for the podcast."
-        + "Don't proceed to a new segment after the ending outro,"
-        + "make ONLY ONE occurance of a wrap up and make it only at the end of the whole conversation at the end of the very last segment."
-        + "when the podcast is over then it's over.\n",
+        + "The show should have 10 segments. There should be a newline in between the hosts' dialogue. Stop before ending each segment. Wait and I will tell you how to continue."
+        + " Don't mention or announce that a segment is over, Just stop the dialogue."
     )
-    dialogue = dialogue + response.text
-    for i in range(5):
+    for chunk in response:
+        dialogue = dialogue + chunk.text
+
+    for i in range(9):
         i = i + 1
-        response = chat.send_message(
-            "write the next segment of the podcast only if the previous segment didn't end with an outro",
-            stream=True,
-        )
-        for chunk in response:
-            dialogue = dialogue + chunk.text
+        if i != 9:
+            response = chat.send_message(
+                "write the next segment of the podcast. Do not announce that the segment is starting or that it is a new topic. Just go straight into the discussion.",
+                stream=True,
+            )
+            for chunk in response:
+                dialogue = dialogue + chunk.text
+        else:
+            response = chat.send_message(
+                "write the last segment of the podcast. After the segment, write an outro to the podcast.",
+                stream=True,
+            )
+            for chunk in response:
+                dialogue = dialogue + chunk.text
 
     extract_dialogue(dialogue)
 
@@ -331,7 +293,7 @@ def generate_revised_script(script_text):
         messages=[
             {
                 "role": "system",
-                "content": "You are a highly skilled editor. Please revise the following podcast script for improved structure, flow, coherence, facts checks and engagement. simply take the script given to you and make it better. if you see multiple outros in the text given to you, keep only the last one but make sure to still include the segments accompanying these outros. make sure to keep it only with the text itself. no comments, announcing new segments or headlines from you. Use every piece of information from the original text while keeping the entire new generated text coherant and logical. Make it sound like a real conversation between two people and maintain the same dynamics Ofir and Daniel are having, including the jokes and puns and even add new ones. do your best to make the podcast the longest you can. Don't forget to have a single outro to the podcast when it's over.",
+                "content": "You are a highly skilled editor. Please revise the following podcast script for improved structure, flow, coherence, facts checks and engagement. simply take the script given to you and make it better. if you see multiple outros in the text given to you, keep only the last one but make sure to still include the segments accompanying these outros. make sure to keep it only with the text itself. no comments, announcing new segments or headlines from you. Use every piece of information from the original text while keeping the entire new generated text coherant and logical. Make it sound like a real conversation between two people and maintain the same dynamics Ofir and Daniel are having, including the jokes and puns and even add new ones. The podcast should still be the same length as the script given to you.",
             },
             {"role": "user", "content": script_text},
         ],
@@ -356,17 +318,19 @@ def clean_revised_dialogue(file_path):
     cleaned_lines = []
     for line in lines:
         cleaned_line = re.sub(
-            r"^\*\*(Ofir|Daniel):\*\*\s*|^(\*\*Ofir\*\*:\s*|\*\*Daniel\*\*:\s*)|(Ofir:|Daniel:)\s*",
+            r"^\\(Ofir|Daniel):\\\s*|^(\\*Ofir\\:\s|\\*Daniel\\:\s)|(Ofir:|Daniel:)\s*",
             "",
             line,
         )
-        cleaned_line = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned_line)
+        cleaned_line = re.sub(r"\\(.?)\\*", r"\1", cleaned_line)
         cleaned_line = re.sub(
             r"\bsegment\s+\d+\b", "", cleaned_line, flags=re.IGNORECASE
         ).strip()
         cleaned_line = re.sub(
             r"\boutro\b", "", cleaned_line, flags=re.IGNORECASE
         ).strip()
+        # Replace multiple consecutive spaces with a single space
+        cleaned_line = re.sub(r"\s{2,}", " ", cleaned_line)
         cleaned_lines.append(cleaned_line)
 
     with open(file_path, "w", encoding="utf-8") as file:
@@ -413,7 +377,7 @@ def generate_audio(file_path, output_filename):
 
 def add_intro_music(introAud, speechAud, topic):
     safe_topic = topic.replace(" ", "_")
-    final_podcast_filename = f"{safe_topic}_final_podcast_with_intro_music.mp3"
+    final_podcast_filename = f"{safe_topic}.mp3"
 
     intro_music = AudioSegment.from_file(introAud, format="wav")
     speech_audio = AudioSegment.from_file(speechAud, format="mp3")
@@ -423,7 +387,6 @@ def add_intro_music(introAud, speechAud, topic):
 
 
 def main():
-    process_and_store_articles(topic, limit=5)
     getScriptfromGemini(topic)
     merge_text_files("host1.txt", "host2.txt", "merged_dialogue.txt")
     total_revision_process("merged_dialogue.txt")
