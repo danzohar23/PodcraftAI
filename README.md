@@ -7,6 +7,8 @@ Welcome to the PodcastGPT, where your podcast dreams take flight! Whether you're
 - 🧙**Script Wizardry**: Wave goodbye to writer's block! Our script generator, armed with the wizardry of generative AI, conjures up compelling podcast scripts on any topic you can dream of.
 - 👯‍♀️**Magical LLM Duo**: Imagine if Shakespeare had a chance to edit Tolkien's drafts – that's our LLM collaboration for you. One AI genius crafts the story, and another polishes it to perfection, ensuring your podcast script shines brighter than a unicorn's mane under a double rainbow.
 - 🧪**Audio Alchemy**: With a flick of our wand, text transforms into mesmerizing audio. It’s like having a bard in your pocket, ready to narrate your epic tales without ever needing a break.
+- 📚**Sage Wisdom Validation**: Draw upon the vast knowledge of updated Wikipedia pages to validate the information in your podcast, ensuring your content is as accurate as it is enchanting. Your listeners receive not only entertainment but also enlightenment.
+- 🏀**Courtside Chronicles**: Dive into the latest NBA action with podcasts crafted around recent games. Stay updated with the triumphs and tribulations of your favorite teams and players, making every episode a courtside experience for the basketball aficionado.
 - 🧜‍♀️**Musical Muse**: Add a sprinkle of magic to your podcast with our musical enchantments. Intro and background tunes set the stage for your narrative, turning each episode into a legendary quest for your listeners’ ears.
 - 😎**API Awesomeness**: Our spellbook is open for integration. With our easy-to-wield API, enchant your own digital domain to generate podcasts that leave your audience spellbound.
 
