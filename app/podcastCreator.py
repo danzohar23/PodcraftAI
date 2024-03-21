@@ -318,11 +318,11 @@ def clean_revised_dialogue(file_path):
     cleaned_lines = []
     for line in lines:
         cleaned_line = re.sub(
-            r"^\\(Ofir|Daniel):\\\s*|^(\\*Ofir\\:\s|\\*Daniel\\:\s)|(Ofir:|Daniel:)\s*",
+            r"^\*\*(Ofir|Daniel):\*\*\s*|^(\*\*Ofir\*\*:\s*|\*\*Daniel\*\*:\s*)|(Ofir:|Daniel:)\s*",
             "",
             line,
         )
-        cleaned_line = re.sub(r"\\(.?)\\*", r"\1", cleaned_line)
+        cleaned_line = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned_line)
         cleaned_line = re.sub(
             r"\bsegment\s+\d+\b", "", cleaned_line, flags=re.IGNORECASE
         ).strip()

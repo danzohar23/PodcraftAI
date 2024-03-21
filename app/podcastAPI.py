@@ -7,7 +7,7 @@ from datetime import datetime
 from azure.storage.blob import BlobServiceClient, BlobClient
 import pyodbc
 from dotenv import dotenv_values
-from podcastCreator import (
+from app.podcastCreator import (
     getScriptfromGemini,
     merge_text_files,
     total_revision_process,
