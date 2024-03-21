@@ -1,4 +1,3 @@
-# test_podcastAPI.py
 import pytest
 from httpx import AsyncClient
 from app.podcastAPI import app
@@ -24,7 +23,7 @@ async def test_generate_podcast():
 
 @pytest.mark.asyncio
 async def test_download_file():
-    test_filename = "google_final_podcast_with_intro_music.mp3"
+    test_filename = "test_podcast_with_intro_music.mp3"
     async with AsyncClient(app=app, base_url="http://test") as ac:
         response = await ac.get(f"/download/{test_filename}")
     assert response.status_code == 200

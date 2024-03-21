@@ -1,19 +1,30 @@
 import logging
+import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 import os
 from pydantic import BaseModel
 from datetime import datetime
-from azure.storage.blob import BlobServiceClient, BlobClient
+from azure.storage.blob import BlobServiceClient
 import pyodbc
 from dotenv import dotenv_values
-from app.podcastCreator import (
-    getScriptfromGemini,
-    merge_text_files,
-    total_revision_process,
-    generate_audio,
-    add_intro_music,
-)
+
+try:
+    from .podcastCreator import (
+        getScriptfromGemini,
+        merge_text_files,
+        total_revision_process,
+        generate_audio,
+        add_intro_music,
+    )
+except ImportError:
+    from podcastCreator import (
+        getScriptfromGemini,
+        merge_text_files,
+        total_revision_process,
+        generate_audio,
+        add_intro_music,
+    )
 
 
 class Podcast(BaseModel):
@@ -60,7 +71,7 @@ def create_podcasts_table():
         conn.commit()
 
 
-def upload_file_to_blob_and_store_url_in_sql(file_path, file_name, container_name):
+def upload_to_blob_and_get_url(file_path, file_name, container_name):
 
     blob_service_client = BlobServiceClient.from_connection_string(
         blob_connection_string
@@ -98,14 +109,13 @@ async def generate_podcast(background_tasks: BackgroundTasks, topic: str):
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     file_path = f"./{filename}"
-    blob_file_path = upload_file_to_blob_and_store_url_in_sql(
-        file_path, filename, "blob1"
-    )
+    blob_file_path = upload_to_blob_and_get_url(file_path, filename, "blob1")
     if os.path.exists(file_path):
         new_podcast = Podcast(
             podcastname=filename, creation_date=datetime.now(), file_path=blob_file_path
         )
-        create_podcast_entry(new_podcast)
+        if filename != "test_podcast_with_intro_music.mp3":
+            create_podcast_entry(new_podcast)
         return FileResponse(path=file_path, filename=filename, media_type="audio/mpeg")
     raise HTTPException(status_code=404, detail="File not found")
 
@@ -133,6 +143,4 @@ def podcast_generation_task(topic: str):
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=80)

@@ -153,11 +153,8 @@ def getNBAPodcastContent():
 def getScriptfromGemini(topic):
     dialogue = ""
     nba_message = ""
-    if topic == None:
-        user_input = input(
-            "Give me an idea for a podcast and I will generate it for you: "
-        )
-        topic = user_input
+    if topic == None or topic == "":
+        topic = "podcast"
     descriptions = ["soothing and rhythmic music inspired by " + topic]
 
     for idx, description in enumerate(descriptions):
@@ -329,7 +326,6 @@ def clean_revised_dialogue(file_path):
         cleaned_line = re.sub(
             r"\boutro\b", "", cleaned_line, flags=re.IGNORECASE
         ).strip()
-        # Replace multiple consecutive spaces with a single space
         cleaned_line = re.sub(r"\s{2,}", " ", cleaned_line)
         cleaned_lines.append(cleaned_line)
 
