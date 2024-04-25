@@ -1,6 +1,6 @@
-  # 🎙️ The PodcastGPT: Unleash Your Podcast Potential 🚀
+  # 🎙️ The PodCraft.ai: Unleash Your Podcast Potential 🚀
 
-Welcome to the PodcastGPT, where your podcast dreams take flight! Whether you're a seasoned podcaster looking to streamline your production or a newcomer eager to dive into the audio ocean, PodcastGPT is your trusty sidekick. Powered by the magic of Python, our toolkit simplifies the podcast creation process from script to soundtrack. Let's embark on this sonic journey together!
+Welcome to the PodCraft.ai, where your podcast dreams take flight! Whether you're a seasoned podcaster looking to streamline your production or a newcomer eager to dive into the audio ocean, PodCraft.ai is your trusty sidekick. Powered by the magic of Python, our toolkit simplifies the podcast creation process from script to soundtrack. Let's embark on this sonic journey together!
 
 ## Features
 
@@ -19,16 +19,29 @@ Now, with a bit more whimsy and a dash of fantasy, the feature list better captu
 ## Getting Started
 
 1. **Preparation**: Ensure you have Python 3.6+ and pip installed. Clone this repository to your local machine to get started.
-2. **Installation**: Dive into the PodcastGPT world by installing the required dependencies:
+2. **Installation**: Dive into the PodCraft.ai world by installing the required dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. **Configuration**: Set up your `.env` file with the necessary API keys and configurations. Don't worry; our setup guide will walk you through each step.
+ ## Configuration
+
+Before we take off, make sure your communications system (API keys) is set up:
+
+1. Add your OpenAI API key to an environment variable:
+   ```bash
+   export OPENAI_API_KEY='your_secret_api_key_here'
+   ```
+
+2. Or keep it secure in a `.env` file in the project's root:
+   ```
+   OPENAI_API_KEY=your_secret_api_key_here
+   ```
+
 4. **Launch**: Start the FastAPI server with:
    ```bash
    uvicorn podcastAPI:app --reload
    ```
-   Now, your PodcastGPT API is soaring high and ready to accept requests!
+   Now, your PodCraft.ai API is soaring high and ready to accept requests!
 
 ## Usage
 
@@ -37,12 +50,12 @@ Now, with a bit more whimsy and a dash of fantasy, the feature list better captu
 To create your podcast masterpiece:
 
 1. Send a POST request to `/generate_podcast/` with the topic of your choice.
-2. PodcastGPT sprinkles its magic, crafting an engaging script, generating audio, and weaving in music.
+2. PodCraft.ai sprinkles its magic, crafting an engaging script, generating audio, and weaving in music.
 3. Download your finished podcast and share your story with the world!
 
 ## Contribution
 
-Join the PodcastGPT band! Whether you're a code wizard, a narrative knight, or an audio aficionado, we welcome your contributions to make PodcastGPT even more magical. Check out our contribution guidelines and open an issue or pull request.
+Join the PodCraft.ai band! Whether you're a code wizard, a narrative knight, or an audio aficionado, we welcome your contributions to make PodCraft.ai even more magical. Check out our contribution guidelines and open an issue or pull request.
 
 ## Support
 
@@ -50,4 +63,4 @@ Encountered a dragon? Found a bug? Have suggestions? Reach out to our support te
 
 ---
 
-Embrace the magic of podcasting with PodcastGPT—where stories come alive. Let's create something amazing together! 🌟
+Embrace the magic of podcasting with PodCraft.ai — where stories come alive. Let's create something amazing together! 🌟
