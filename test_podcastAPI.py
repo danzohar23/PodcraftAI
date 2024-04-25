@@ -12,7 +12,6 @@ async def test_read_main():
         "Welcome to PodcastGPT": "Write your topic for the podcast, and once the file is ready you can type the topic into the 'download' function to get the podcast file. For example, 'open ai' will be 'open_ai'"
     }
 
-
 @pytest.mark.asyncio
 async def test_generate_podcast():
     test_topic = "Test Topic"

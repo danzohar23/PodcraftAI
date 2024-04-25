@@ -179,7 +179,7 @@ def getScriptfromGemini(topic):
         f"{nba_message} Considering the following informantion: '{podcast_content}', write a podcast dialogue inspired by the topic '{topic}',"
         + "if no topic was inserted, make up a podcast about a topic of your desire.'\n"
         + "The podcast's content should be updated to news from the past week."
-        + " The podcast is called Podcast GPT"
+        + " The podcast is called Podcraft AI"
         " and it is two people (Ofir and Daniel) talking about a topic that is defined as follows: "
         + topic
         + ". If the topic is too broad you can narrow it down to something more specific, but still make it "

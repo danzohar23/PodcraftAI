@@ -28,7 +28,6 @@ def test_get_embedding_success(mock_embeddings_create):
     embedding = get_embedding("Sample text for embedding.")
     assert embedding == expected_embedding
 
-
 @patch("app.podcastCreator.client.embeddings.create")
 def test_get_embedding_failure(mock_embeddings_create):
     mock_embeddings_create.side_effect = Exception("API Error")

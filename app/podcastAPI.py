@@ -5,8 +5,6 @@ from fastapi.responses import FileResponse
 import os
 from pydantic import BaseModel
 from datetime import datetime
-from azure.storage.blob import BlobServiceClient
-import pyodbc
 from dotenv import dotenv_values
 
 try:
@@ -34,63 +32,8 @@ class Podcast(BaseModel):
 
 
 config = dotenv_values()
-if config != {}:
-    connection_string = config["AZURE_SQL_CONNECTIONSTRING"]
-    blob_connection_string = config["AZURE_BLOB_CONNECTIONSTRING"]
-else:
-    connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
-    blob_connection_string = os.environ["AZURE_BLOB_CONNECTIONSTRING"]
-
-
-def create_podcast_entry(podcast: Podcast):
-    with pyodbc.connect(connection_string) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Podcasts (Name, CreationDate, FilePath) VALUES (?, ?, ?)",
-            podcast.podcastname,
-            podcast.creation_date,
-            podcast.file_path,
-        )
-        conn.commit()
-
-
-def create_podcasts_table():
-    with pyodbc.connect(connection_string) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Podcasts')
-            CREATE TABLE Podcasts (
-                Id INT PRIMARY KEY IDENTITY,
-                Name NVARCHAR(255),
-                CreationDate DATETIME,
-                FilePath NVARCHAR(255)
-            )
-        """
-        )
-        conn.commit()
-
-
-def upload_to_blob_and_get_url(file_path, file_name, container_name):
-
-    blob_service_client = BlobServiceClient.from_connection_string(
-        blob_connection_string
-    )
-
-    blob_client = blob_service_client.get_blob_client(
-        container=container_name, blob=file_name
-    )
-
-    with open(file_path, "rb") as data:
-        blob_client.upload_blob(data, overwrite=True)
-
-    blob_url = blob_client.url
-
-    return blob_url
-
 
 app = FastAPI()
-create_podcasts_table()
 
 
 @app.get("/")
@@ -109,13 +52,7 @@ async def generate_podcast(background_tasks: BackgroundTasks, topic: str):
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     file_path = f"./{filename}"
-    blob_file_path = upload_to_blob_and_get_url(file_path, filename, "blob1")
     if os.path.exists(file_path):
-        new_podcast = Podcast(
-            podcastname=filename, creation_date=datetime.now(), file_path=blob_file_path
-        )
-        if filename != "test_podcast_with_intro_music.mp3":
-            create_podcast_entry(new_podcast)
         return FileResponse(path=file_path, filename=filename, media_type="audio/mpeg")
     raise HTTPException(status_code=404, detail="File not found")
 
@@ -143,4 +80,4 @@ def podcast_generation_task(topic: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=80)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
